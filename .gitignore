@@ -1,0 +1,30 @@
+# Variables de entorno (nunca subir credenciales ☠️)
+.env
+
+# Archivos de compilación Java/Maven
+target/
+*.jar
+*.war
+*.class
+
+# Archivos de sistema Mac
+.DS_Store
+
+# Archivos de sistema Windows
+Thumbs.db
+
+# IDE - IntelliJ
+.idea/
+*.iml
+
+# IDE - VSCode
+.vscode/
+
+# Node modules del frontend
+node_modules/
+dist/
+build/
+
+# Logs
+*.log
+logs/
