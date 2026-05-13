@@ -1,0 +1,73 @@
+name: CI Pipeline
+
+on:
+  pull_request:
+  push:
+    branches:
+      - develop
+
+jobs:
+  frontend-build:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: front_despacho
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Construir aplicación
+        run: npm run build
+
+      - name: Ejecutar tests
+        run: npm run test
+
+  backend-ventas-build:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: back-Ventas_SpringBoot/Springboot-API-REST
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Build y tests
+        run: mvn clean install
+
+  backend-despachos-build:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: back-Despachos_SpringBoot/Springboot-API-REST-DESPACHO
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Build y tests
+        run: mvn clean install
