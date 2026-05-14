@@ -13,8 +13,8 @@ WORKDIR /app
 COPY --from=builder /build/target/*.jar app.jar
 COPY entrypoint.sh /app/entrypoint.sh
 
-RUN chmod +x /app/entrypoint.sh
+RUN dos2unix /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
 EXPOSE 8081
-# Ahora el ENTRYPOINT ejecuta el script
+#ENTRYPOINT ejecuta el script
 ENTRYPOINT ["./entrypoint.sh"]
