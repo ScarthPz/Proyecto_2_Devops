@@ -13,7 +13,7 @@ services:
       - mysql_data:/var/lib/mysql
 
   backend-ventas:
-    build: 
+    build:
       context: ./back-Ventas_SpringBoot/Springboot-API-REST
       dockerfile: Dockerfile
     container_name: backend-ventas
@@ -28,8 +28,9 @@ services:
     depends_on:
       - db
 
+
   backend-despachos:
-    build: 
+    build:
       context: ./back-Despachos_SpringBoot/Springboot-API-REST-DESPACHO
       dockerfile: Dockerfile
     container_name: backend-despachos
@@ -44,8 +45,9 @@ services:
     depends_on:
       - db
 
+
   frontend:
-    build: 
+    build:
       context: ./front_despacho
       dockerfile: Dockerfile
     container_name: frontend-despacho
