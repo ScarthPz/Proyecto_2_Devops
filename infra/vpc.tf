@@ -20,7 +20,7 @@ resource "aws_subnet" "public_b" {
   map_public_ip_on_launch = true
 }
 
-# 👇 Nueva subred privada para el EC2 de MySQL
+
 resource "aws_subnet" "private" {
   vpc_id                  = aws_vpc.devops_vpc.id
   cidr_block              = "10.0.3.0/24"
@@ -57,7 +57,7 @@ resource "aws_nat_gateway" "devops_nat" {
   depends_on = [aws_internet_gateway.devops_ig]
 }
 
-# Route table pública (sin cambios)
+
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.devops_vpc.id
 
