@@ -1,0 +1,17 @@
+# .github/workflows/deploy.yml
+name: CI/CD — Innovatech Despachos
+
+# Solo se activa con push a la rama "deploy"
+# No corre en main, develop ni feature branches
+on:
+  push:
+    branches:
+      - deploy
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
