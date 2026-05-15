@@ -110,3 +110,17 @@ jobs:
               -e DB_USERNAME=${{ secrets.DB_USERNAME }} \
               -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
               ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/${{ secrets.ECR_REPO_BACKEND }}:latest
+      
+      
+      - name: Build y push Backend Ventas
+              env:
+                ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+                IMAGE_TAG: ${{ github.sha }}
+              run: |
+                docker build \
+                  --platform linux/amd64 \
+                  -t $ECR_REGISTRY/${{ secrets.ECR_REPO_BACKEND_VENTAS }}:$IMAGE_TAG \
+                  -t $ECR_REGISTRY/${{ secrets.ECR_REPO_BACKEND_VENTAS }}:latest \
+                  ./back-Ventas_SpringBoot/Springboot-API-REST
+                docker push $ECR_REGISTRY/${{ secrets.ECR_REPO_BACKEND_VENTAS }}:$IMAGE_TAG
+                docker push $ECR_REGISTRY/${{ secrets.ECR_REPO_BACKEND_VENTAS }}:latest
