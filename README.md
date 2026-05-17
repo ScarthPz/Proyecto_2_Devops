@@ -56,34 +56,10 @@ Proyecto_2_Devops/
 
 ## Arquitectura AWS
 
-```
-Internet
-    │
-    ▼
-┌─────────────────────────────────────────────┐
-│              VPC devops_vpc                  │
-│              10.0.0.0/16                     │
-│                                              │
-│  ┌─────────────────────────────────────┐     │
-│  │         Subred Pública              │     │
-│  │  ┌──────────────────────────────┐   │     │
-│  │  │     ECS Fargate Task         │   │     │
-│  │  │                              │   │     │
-│  │  │  [Frontend  :80  ]  ◄── Internet │   │
-│  │  │  [Backend Ventas :8080]       │   │     │
-│  │  │  [Backend Despachos :8081]    │   │     │
-│  │  └──────────────────────────────┘   │     │
-│  └─────────────────────────────────────┘     │
-│                    │                         │
-│  ┌─────────────────────────────────────┐     │
-│  │         Subred Privada              │     │
-│  │  ┌──────────────────────────────┐   │     │
-│  │  │   EC2 MySQL :3306            │   │     │
-│  │  │   db_ventas + db_despachos   │   │     │
-│  │  └──────────────────────────────┘   │     │
-│  └─────────────────────────────────────┘     │
-└─────────────────────────────────────────────┘
-```
+# Diagrama
+
+![Diagrama de arquitectura AWS](./img-aws/diagramaDevops.png)
+
 
 Los tres microservicios corren en la misma **ECS Fargate Task** con red `awsvpc`, compartiendo `localhost`. El Nginx del frontend actúa como proxy inverso:
 
@@ -100,6 +76,9 @@ MySQL corre en una EC2 dentro de la subred privada, accesible únicamente desde 
 - [AWS CLI](https://aws.amazon.com/cli/)
 - [Terraform CLI >= 1.0](https://www.terraform.io/)
 - Git
+- [Node.js 20](https://nodejs.org/)
+- [JAVA 17](https://adoptium.net/)
+- [MAVEN 3.9+](https://maven.apache.org/)
 
 ---
 
