@@ -51,11 +51,11 @@ resource "aws_ecs_task_definition" "app" {
         }
       ]
       healthCheck = {
-        command     = ["curl -f http://localhost:8081 || exit 1"]
+        command     = ["CMD-SHELL", "curl -f http://localhost:8081/actuator/health/readiness || exit 1"]
         interval    = 30
         timeout     = 5
         retries     = 5
-        startPeriod = 60
+        startPeriod = 120
       }
 
       environment = [

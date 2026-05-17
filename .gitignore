@@ -2,6 +2,7 @@
 .terraform/
 *.tfstate
 *.tfstate.*
+*.tfvars.*
 
 # Variables de entorno (nunca subir credenciales ☠️)
 .env
