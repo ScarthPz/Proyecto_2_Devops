@@ -1,3 +1,8 @@
+# =============================================================
+# Backend Despachos — Deployment + Service
+# Imagen obtenida desde Amazon ECR.
+# Credenciales de DB leídas desde el Secret "db-credentials".
+# =============================================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,7 +19,9 @@ spec:
     spec:
       containers:
         - name: backend-despachos
-          image: backend_despachos:latest
+          # Imagen base que el pipeline CD reemplaza con la URL ECR real:
+          # ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/backend_despachos:SHA
+          image: placeholder/backend_despachos:latest
           ports:
             - containerPort: 8081
           env:
@@ -24,10 +31,17 @@ spec:
               value: "3306"
             - name: DB_NAME
               value: despacho_db
+            # Credenciales leídas desde Kubernetes Secret (no hardcodeadas)
             - name: DB_USERNAME
-              value: root
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: DB_USERNAME
             - name: DB_PASSWORD
-              value: root
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: DB_PASSWORD
 ---
 apiVersion: v1
 kind: Service

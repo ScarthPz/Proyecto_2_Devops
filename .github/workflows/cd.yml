@@ -123,6 +123,9 @@ jobs:
             --region $AWS_REGION \
             --name $CLUSTER
 
+      - name: Aplicar Secret de credenciales DB
+        run: kubectl apply -f infra/k8s/db-secret.yml
+
       - name: Aplicar MySQL Despachos
         run: kubectl apply -f infra/k8s/mysql-despachos.yml
 

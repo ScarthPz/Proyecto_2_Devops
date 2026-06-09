@@ -1,3 +1,7 @@
+# =============================================================
+# MySQL Despachos — Deployment + Service
+# Contraseña root leída desde el Secret "db-credentials".
+# =============================================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -18,8 +22,12 @@ spec:
           ports:
             - containerPort: 3306
           env:
+            # Contraseña leída desde Kubernetes Secret (no hardcodeada)
             - name: MYSQL_ROOT_PASSWORD
-              value: root
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: MYSQL_ROOT_PASSWORD
             - name: MYSQL_DATABASE
               value: despacho_db
 ---

@@ -1,6 +1,6 @@
 # Innovatech Chile — Sistema de Gestión de Despachos
 
-> Sistema de gestión de despachos y ventas desarrollado con arquitectura de microservicios, desplegado en AWS con ECS Fargate e infraestructura como código con Terraform, automatizado mediante GitHub Actions.
+> Sistema de gestión de despachos y ventas desarrollado con arquitectura de microservicios, desplegado en AWS con EKS (Kubernetes) e infraestructura como código con Terraform, automatizado mediante GitHub Actions.
 
 ---
 
@@ -13,7 +13,7 @@
 | Backend Despachos | Spring Boot 3 + Java 17 + JPA/Hibernate + Actuator |
 | Base de datos | MySQL 8 (EC2 en subred privada) |
 | Contenedorización | Docker + Docker Compose |
-| Infraestructura | AWS ECS Fargate + ECR + VPC — IaC con Terraform |
+| Infraestructura | AWS EKS + ECR + VPC — IaC con Terraform |
 | CI/CD | GitHub Actions |
 
 ---
@@ -24,8 +24,8 @@
 Proyecto_2_Devops/
 ├── .github/
 │   └── workflows/
-│       ├── ci.yml                     # Pipeline CI — build y tests (rama develop)
-│       └── cd.yml                     # Pipeline CD — build, push ECR y deploy ECS (rama deploy)
+│       ├── ci.yml                     # Pipeline CI — build y tests 
+│       └── cd.yml                     # Pipeline CD — build, push ECR y deploy ECS
 ├── front_despacho/                    # Frontend React (puerto 80)
 │   ├── Dockerfile
 │   └── nginx.conf                     # Proxy inverso hacia backends
@@ -61,7 +61,7 @@ Proyecto_2_Devops/
 ![Diagrama de arquitectura AWS](./img-aws/diagramaDevops.png)
 
 
-Los tres microservicios corren en la misma **ECS Fargate Task** con red `awsvpc`, compartiendo `localhost`. El Nginx del frontend actúa como proxy inverso:
+Los tres microservicios corren como **Deployments independientes en EKS**, cada uno con su propio Service de Kubernetes. El Nginx del frontend actúa como proxy inverso:
 
 - `/api/ventas/*` → `localhost:8080`
 - `/api/despachos/*` → `localhost:8081`
@@ -87,7 +87,7 @@ MySQL corre en una EC2 dentro de la subred privada, accesible únicamente desde 
 ### 1. Clonar el repositorio
 
 ```bash
-git clone <url-del-repositorio>
+git clone <https://github.com/ScarthPz/Proyecto_2_Devops.git>
 cd Proyecto_2_Devops
 ```
 
@@ -185,16 +185,36 @@ terraform apply
 Esto crea:
 - VPC `devops_vpc` (10.0.0.0/16) con subredes pública y privada
 - NAT Gateway para salida de la subred privada
-- ECS Cluster + Task Definition + Service (Fargate)
-- EC2 con MySQL en subred privada
-- Repositorios ECR: `devops-e2-frontend`, `devops-e2-backend-ventas`, `devops-e2-backend-despachos`
+- EKS Cluster `despacho-cluster` con node group administrado
+- Manifiestos K8s: Deployments, Services y HPA para los 3 microservicios
+- Repositorios ECR: `frontend_despacho`, `backend_ventas`, `backend_despachos`
 - Security Groups con acceso controlado
-- CloudWatch Log Group `/ecs/devops-e2` con retención de 7 días
+- CloudWatch Log Group con retención de 7 días
 
 ### 4. Obtener outputs
 
 ```bash
 terraform output
+```
+
+---
+
+## Autoscaling — HPA
+
+Los tres servicios tienen configurado un **Horizontal Pod Autoscaler (HPA)** en `infra/k8s/hpa.yml`:
+
+| Servicio | Min réplicas | Max réplicas | Umbral CPU |
+|---|---|---|---|
+| frontend | 1 | 4 | 50% |
+| backend-despachos | 1 | 4 | 50% |
+| backend-ventas | 1 | 4 | 50% |
+
+**Justificación del 50% de CPU:** Se eligió este umbral porque permite que Kubernetes escale *antes* de que el pod se sature, dejando margen de respuesta ante picos de carga. Un valor más alto (ej. 80%) reaccionaría muy tarde; uno más bajo (ej. 20%) escalaría innecesariamente con carga normal.
+
+Para verificar el estado del autoscaling:
+```bash
+kubectl get hpa
+kubectl describe hpa hpa-frontend
 ```
 
 ---
@@ -228,7 +248,11 @@ push → deploy
     │   └── docker build + push backend-despachos → ECR
     │
     └── deploy
-        └── aws ecs update-service --force-new-deployment
+        ├── kubectl apply db-secret.yml
+        ├── kubectl apply mysql / backend / frontend / hpa
+        ├── kubectl set image (actualiza con tag del commit)
+        ├── kubectl rollout status (espera confirmación)
+        └── kubectl get pods + get hpa + URL pública del LoadBalancer
 ```
 
 ### GitHub Secrets requeridos
@@ -261,8 +285,12 @@ En AWS, la base de datos corre en una EC2 con volumen EBS `gp3` de 30 GB.
 
 ## Endpoints principales
 
-> ⚠️ La IP pública cambia cada vez que se reinicia el laboratorio de AWS Academy.
-> Obtén la IP actual desde: **AWS Console → ECS → devops-e2-cluster → Tasks → Task activa → Network → Public IP**
+> ⚠️ La URL pública cambia cada vez que se reinicia el laboratorio de AWS Academy.
+> Obtén la URL actual ejecutando:
+> ```bash
+> kubectl get service frontend
+> ```
+> O al final del pipeline CD en el job `get-url`.
 
 ### Backend Ventas — `http://<IP_PUBLICA>/api/ventas/`
 
@@ -299,30 +327,32 @@ En AWS, la base de datos corre en una EC2 con volumen EBS `gp3` de 30 GB.
 # 1. Iniciar lab en AWS Academy y actualizar los secrets en GitHub
 
 # 2. Clonar el repositorio
-git clone <url-del-repositorio>
+git clone <https://github.com/ScarthPz/Proyecto_2_Devops.git>
 cd Proyecto_2_Devops
 
 # 3. Configurar credenciales AWS
 aws configure
 
-# 4. Recrear infraestructura
-cd infra
+# 4. Recrear infraestructura EKS con Terraform
+cd infra/terraform
 terraform init
 terraform apply
 
-# 5. Activar el pipeline haciendo push a deploy
+# 5. Activar el pipeline CD haciendo push a deploy
 git checkout deploy
 git commit --allow-empty -m "chore: forzar redespliegue"
 git push origin deploy
 
-# 6. Obtener la IP pública del frontend en ECS
-# AWS Console → ECS → devops-e2-cluster → Tasks → Task → Network → Public IP
+# 6. Obtener la URL pública del frontend
+kubectl get service frontend
+# O esperar el output al final del pipeline CD (job get-url)
 ```
 
 ---
 
 ##  Buenas prácticas aplicadas 
 
+- **Kubernetes Secrets** para credenciales de base de datos (`db-secret.yml`), evitando contraseñas hardcodeadas en los manifiestos.
 - **Multi-stage Dockerfiles** para imágenes limpias y de menor tamaño.
 - **Secretos gestionados** con GitHub Secrets y `terraform.tfvars` (en `.gitignore`), nunca en el código fuente.
 - **Infraestructura como código** con Terraform, reproducible en cualquier cuenta AWS Academy.
@@ -335,4 +365,4 @@ git push origin deploy
 
 ---
 
-© 2025 Innovatech Chile — DuocUC | Introducción a Herramientas DevOps  ᓚᘏᗢ
+© 2026 Innovatech Chile | Introducción a Herramientas DevOps  ᓚᘏᗢ

@@ -1,3 +1,9 @@
+# =============================================================
+# Frontend — Deployment + Service
+# Imagen obtenida desde Amazon ECR (no imagen local).
+# La URL ECR se inyecta durante el pipeline CD con:
+#   kubectl set image deployment/frontend frontend=<ECR_URL>:<TAG>
+# =============================================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,7 +20,9 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: frontend_despacho:latest
+          # Imagen base que el pipeline CD reemplaza con la URL ECR real:
+          # ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/frontend_despacho:SHA
+          image: placeholder/frontend_despacho:latest
           ports:
             - containerPort: 80
 ---
