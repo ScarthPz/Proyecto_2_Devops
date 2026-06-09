@@ -1,4 +1,4 @@
-name: CD Pipeline
+name: CD Pipeline - EKS Deploy
 
 on:
   push:
@@ -7,14 +7,24 @@ on:
 
 env:
   AWS_REGION: us-east-1
+  CLUSTER: despacho-cluster
 
 jobs:
+
+  # JOB 1: Build y Push de imágenes a ECR
+
   build-and-push:
     runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.tag.outputs.value }}
 
     steps:
-      - name: Checkout código
+      - name: Checkout repositorio
         uses: actions/checkout@v4
+
+      - name: Definir tag (SHA corto del commit)
+        id: tag
+        run: echo "value=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
 
       - name: Configurar credenciales AWS
         uses: aws-actions/configure-aws-credentials@v4
@@ -25,50 +35,142 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login en Amazon ECR
-        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build y push Frontend
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
+      - name: Obtener Account ID y definir URLs ECR
         run: |
-          docker build \
-            --platform linux/amd64 \
-            -t $ECR_REGISTRY/${{ secrets.ECR_REPO_FRONTEND }}:$IMAGE_TAG \
-            -t $ECR_REGISTRY/${{ secrets.ECR_REPO_FRONTEND }}:latest \
-            ./front_despacho
-          docker push $ECR_REGISTRY/${{ secrets.ECR_REPO_FRONTEND }}:$IMAGE_TAG
-          docker push $ECR_REGISTRY/${{ secrets.ECR_REPO_FRONTEND }}:latest
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "FRONTEND_ECR=${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/frontend_despacho"          >> $GITHUB_ENV
+          echo "BACKEND_DESPACHOS_ECR=${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/backend_despachos" >> $GITHUB_ENV
+          echo "BACKEND_VENTAS_ECR=${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/backend_ventas"       >> $GITHUB_ENV
+          echo "IMAGE_TAG=${GITHUB_SHA::8}" >> $GITHUB_ENV
 
-      - name: Build y push Backend Ventas
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
+      - name: Build Frontend
         run: |
-          docker build \
-            --platform linux/amd64 \
-            -t $ECR_REGISTRY/${{ secrets.ECR_REPO_BACKEND_VENTAS }}:$IMAGE_TAG \
-            -t $ECR_REGISTRY/${{ secrets.ECR_REPO_BACKEND_VENTAS }}:latest \
-            ./back-Ventas_SpringBoot/Springboot-API-REST
-          docker push $ECR_REGISTRY/${{ secrets.ECR_REPO_BACKEND_VENTAS }}:$IMAGE_TAG
-          docker push $ECR_REGISTRY/${{ secrets.ECR_REPO_BACKEND_VENTAS }}:latest
+          echo " Inicio: $(date)"
+          docker buildx build --platform linux/amd64 \
+            -t $FRONTEND_ECR:$IMAGE_TAG \
+            -t $FRONTEND_ECR:latest \
+            ./front_despacho --load
+          echo "Fin: $(date)"
 
-      - name: Build y push Backend Despachos
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
+      - name: Push Frontend → ECR
         run: |
-          docker build \
-            --platform linux/amd64 \
-            -t $ECR_REGISTRY/${{ secrets.ECR_REPO_BACKEND_DESPACHOS }}:$IMAGE_TAG \
-            -t $ECR_REGISTRY/${{ secrets.ECR_REPO_BACKEND_DESPACHOS }}:latest \
-            ./back-Despachos_SpringBoot/Springboot-API-REST-DESPACHO
-          docker push $ECR_REGISTRY/${{ secrets.ECR_REPO_BACKEND_DESPACHOS }}:$IMAGE_TAG
-          docker push $ECR_REGISTRY/${{ secrets.ECR_REPO_BACKEND_DESPACHOS }}:latest
+          docker push $FRONTEND_ECR:$IMAGE_TAG
+          docker push $FRONTEND_ECR:latest
+
+      - name: Build Backend Despachos
+        run: |
+          echo " Inicio: $(date)"
+          docker buildx build --platform linux/amd64 \
+            -t $BACKEND_DESPACHOS_ECR:$IMAGE_TAG \
+            -t $BACKEND_DESPACHOS_ECR:latest \
+            ./back-Despachos_SpringBoot/Springboot-API-REST-DESPACHO --load
+          echo "Fin: $(date)"
+
+      - name: Push Backend Despachos → ECR
+        run: |
+          docker push $BACKEND_DESPACHOS_ECR:$IMAGE_TAG
+          docker push $BACKEND_DESPACHOS_ECR:latest
+
+      - name: Build Backend Ventas
+        run: |
+          echo "Inicio: $(date)"
+          docker buildx build --platform linux/amd64 \
+            -t $BACKEND_VENTAS_ECR:$IMAGE_TAG \
+            -t $BACKEND_VENTAS_ECR:latest \
+            ./back-Ventas_SpringBoot/Springboot-API-REST --load
+          echo "Fin: $(date)"
+
+      - name: Push Backend Ventas → ECR
+        run: |
+          docker push $BACKEND_VENTAS_ECR:$IMAGE_TAG
+          docker push $BACKEND_VENTAS_ECR:latest
+
+
+  # JOB 2: Deploy en EKS
 
   deploy:
     needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Obtener Account ID y definir URLs ECR
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "FRONTEND_ECR=${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/frontend_despacho"          >> $GITHUB_ENV
+          echo "BACKEND_DESPACHOS_ECR=${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/backend_despachos" >> $GITHUB_ENV
+          echo "BACKEND_VENTAS_ECR=${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/backend_ventas"       >> $GITHUB_ENV
+          echo "IMAGE_TAG=${{ needs.build-and-push.outputs.image-tag }}" >> $GITHUB_ENV
+
+      - name: Instalar kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Conectar al clúster EKS
+        run: |
+          aws eks update-kubeconfig \
+            --region $AWS_REGION \
+            --name $CLUSTER
+
+      - name: Aplicar MySQL Despachos
+        run: kubectl apply -f infra/k8s/mysql-despachos.yml
+
+      - name: Aplicar MySQL Ventas
+        run: kubectl apply -f infra/k8s/mysql-ventas.yml
+
+      - name: Aplicar Backend Despachos
+        run: kubectl apply -f infra/k8s/backend-despachos.yml
+
+      - name: Aplicar Backend Ventas
+        run: kubectl apply -f infra/k8s/backend-ventas.yml
+
+      - name: Aplicar Frontend
+        run: kubectl apply -f infra/k8s/frontend.yml
+
+      - name: Aplicar HPA (autoscaling)
+        run: kubectl apply -f infra/k8s/hpa.yml
+
+
+      - name: Actualizar imagen Frontend
+        run: |
+          kubectl set image deployment/frontend \
+            frontend=$FRONTEND_ECR:$IMAGE_TAG
+
+      - name: Actualizar imagen Backend Despachos
+        run: |
+          kubectl set image deployment/backend-despachos \
+            backend-despachos=$BACKEND_DESPACHOS_ECR:$IMAGE_TAG
+
+      - name: Actualizar imagen Backend Ventas
+        run: |
+          kubectl set image deployment/backend-ventas \
+            backend-ventas=$BACKEND_VENTAS_ECR:$IMAGE_TAG
+
+      - name: Esperar rollout Frontend
+        run: kubectl rollout status deployment/frontend --timeout=180s
+
+      - name: Esperar rollout Backend Despachos
+        run: kubectl rollout status deployment/backend-despachos --timeout=180s
+
+      - name: Esperar rollout Backend Ventas
+        run: kubectl rollout status deployment/backend-ventas --timeout=180s
+
+
+  # JOB 3: Mostrar URL pública
+
+  get-url:
+    needs: deploy
     runs-on: ubuntu-latest
 
     steps:
@@ -80,10 +182,50 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Deploy en ECS
+      - name: Instalar kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Conectar al clúster EKS
         run: |
-          aws ecs update-service \
-            --cluster devops-e2-cluster \
-            --service app \
-            --force-new-deployment \
-            --no-cli-pager
+          aws eks update-kubeconfig \
+            --region $AWS_REGION \
+            --name $CLUSTER
+
+      - name: Estado de pods y HPA
+        run: |
+          echo "══════════════════════════════════════"
+          echo "PODS EN EJECUCIÓN"
+          echo "══════════════════════════════════════"
+          kubectl get pods -o wide
+          echo ""
+          echo "══════════════════════════════════════"
+          echo "AUTOSCALING (HPA)"
+          echo "══════════════════════════════════════"
+          kubectl get hpa
+
+      - name: Obtener URL pública del Frontend
+        run: |
+          echo "Esperando hostname del LoadBalancer..."
+          for i in $(seq 1 20); do
+            HOSTNAME=$(kubectl get service frontend \
+              -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+
+            if [ -n "$HOSTNAME" ]; then
+              echo ""
+              echo "╔══════════════════════════════════════════════════════╗"
+              echo "║           👻  DESPLIEGUE EXITOSO  👻                   ║"
+              echo "╠══════════════════════════════════════════════════════╣"
+              echo "║  🌐  URL PÚBLICA DEL FRONTEND:                       ║"
+              echo "║                                                      ║"
+              echo "║  http://$HOSTNAME"
+              echo "║                                                      ║"
+              echo "║  Commit: ${{ needs.build-and-push.outputs.image-tag }} ║"
+              echo "╚══════════════════════════════════════════════════════╝"
+              exit 0
+            fi
+
+            echo "Intento $i/20 — esperando 15 segundos..."
+            sleep 15
+          done
+
+          echo "  Ejecuta manualmente: kubectl get service frontend"
