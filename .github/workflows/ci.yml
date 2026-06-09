@@ -7,7 +7,7 @@ on:
       - develop
 
 jobs:
-  # ── Frontend ──────────────────────────────────────
+  # Frontend 
   frontend-build:
     runs-on: ubuntu-latest
     defaults:
@@ -33,7 +33,7 @@ jobs:
       - name: Verificar build generado
         run: ls -la dist/
 
-  # ── Backend Despachos ─────────────────────────────
+  # Backend Despachos
   backend-despachos-build:
     runs-on: ubuntu-latest
     defaults:
@@ -53,7 +53,7 @@ jobs:
       - name: Build y tests
         run: mvn clean install
 
-  # ── Backend Ventas ────────────────────────────────
+  # Backend Ventas 
   backend-ventas-build:
     runs-on: ubuntu-latest
     defaults:

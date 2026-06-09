@@ -216,13 +216,13 @@ jobs:
             if [ -n "$HOSTNAME" ]; then
               echo ""
               echo "╔══════════════════════════════════════════════════════╗"
-              echo "║           👻  DESPLIEGUE EXITOSO  👻                   ║"
+              echo "║           👻  DESPLIEGUE EXITOSO  👻                ║"
               echo "╠══════════════════════════════════════════════════════╣"
               echo "║  🌐  URL PÚBLICA DEL FRONTEND:                       ║"
               echo "║                                                      ║"
               echo "║  http://$HOSTNAME"
               echo "║                                                      ║"
-              echo "║  Commit: ${{ needs.build-and-push.outputs.image-tag }} ║"
+              echo "║  echo "║  Commit: $IMAGE_TAG                         ║"
               echo "╚══════════════════════════════════════════════════════╝"
               exit 0
             fi

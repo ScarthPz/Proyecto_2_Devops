@@ -11,7 +11,7 @@
 | Frontend | React + Vite + Tailwind CSS + Nginx |
 | Backend Ventas | Spring Boot 3 + Java 17 + JPA/Hibernate + Actuator |
 | Backend Despachos | Spring Boot 3 + Java 17 + JPA/Hibernate + Actuator |
-| Base de datos | MySQL 8 (EC2 en subred privada) |
+| Base de datos | MySQL 8 (Pod dentro del clúster EKS) |
 | Contenedorización | Docker + Docker Compose |
 | Infraestructura | AWS EKS + ECR + VPC — IaC con Terraform |
 | CI/CD | GitHub Actions |
@@ -24,11 +24,11 @@
 Proyecto_2_Devops/
 ├── .github/
 │   └── workflows/
-│       ├── ci.yml                     # Pipeline CI — build y tests 
-│       └── cd.yml                     # Pipeline CD — build, push ECR y deploy ECS
+│       ├── ci.yml                     # Pipeline CI — build y tests (rama develop)
+│       └── cd.yml                     # Pipeline CD — build, push ECR y deploy EKS (rama deploy)
 ├── front_despacho/                    # Frontend React (puerto 80)
 │   ├── Dockerfile
-│   └── nginx.conf                     # Proxy inverso hacia backends
+│   └── nginx.conf                     # Proxy inverso hacia backends vía Service K8s
 ├── back-Ventas_SpringBoot/
 │   └── Springboot-API-REST/           # Backend Ventas (puerto 8080)
 │       ├── Dockerfile
@@ -37,17 +37,25 @@ Proyecto_2_Devops/
 │   └── Springboot-API-REST-DESPACHO/  # Backend Despachos (puerto 8081)
 │       ├── Dockerfile
 │       └── entrypoint.sh
-├── infra/                             # Infraestructura como código (Terraform)
-│   ├── main.tf
-│   ├── vpc.tf
-│   ├── instances.tf
-│   ├── ecs.tf
-│   ├── task_app.tf
-│   ├── service.tf
-│   ├── security_groups.tf
-│   ├── ecr.tf
-│   ├── variables.tf
-│   └── outputs.tf
+├── infra/
+│   ├── k8s/                           # Manifiestos Kubernetes
+│   │   ├── frontend.yml
+│   │   ├── backend-ventas.yml
+│   │   ├── backend-despachos.yml
+│   │   ├── mysql-ventas.yml
+│   │   ├── mysql-despachos.yml
+│   │   ├── hpa.yml
+│   │   └── db-secret.yml              # Kubernetes Secret para credenciales DB
+│   └── terraform/                     # Infraestructura como código
+│       ├── main.tf
+│       ├── vpc.tf
+│       ├── eks.tf
+│       ├── ecr.tf
+│       ├── security_groups.tf
+│       ├── variables.tf
+│       └── outputs.tf
+├── secrets.yml                        # Documentación de secrets requeridos
+├── .env.example                       # Variables de entorno de referencia
 ├── docker-compose.yml                 # Stack completo para ejecución local
 └── README.md
 ```
@@ -56,17 +64,14 @@ Proyecto_2_Devops/
 
 ## Arquitectura AWS
 
-# Diagrama
-
 ![Diagrama de arquitectura AWS](./img-aws/diagramaDevops.png)
 
+Los tres microservicios corren como **Deployments independientes en EKS**, cada uno con su propio Service de Kubernetes. El Nginx del frontend actúa como proxy inverso usando DNS interno de Kubernetes:
 
-Los tres microservicios corren como **Deployments independientes en EKS**, cada uno con su propio Service de Kubernetes. El Nginx del frontend actúa como proxy inverso:
+- `/api/ventas/*` → Service `backend-ventas:8080` (ClusterIP)
+- `/api/despachos/*` → Service `backend-despachos:8081` (ClusterIP)
 
-- `/api/ventas/*` → `localhost:8080`
-- `/api/despachos/*` → `localhost:8081`
-
-MySQL corre en una EC2 dentro de la subred privada, accesible únicamente desde el Security Group de ECS.
+MySQL corre como pods dentro del clúster EKS en la subred privada, accesible únicamente desde los backends vía Service ClusterIP. Las credenciales se gestionan con Kubernetes Secrets (`db-credentials`).
 
 ---
 
@@ -75,10 +80,11 @@ MySQL corre en una EC2 dentro de la subred privada, accesible únicamente desde 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 - [AWS CLI](https://aws.amazon.com/cli/)
 - [Terraform CLI >= 1.0](https://www.terraform.io/)
+- [kubectl](https://kubernetes.io/docs/tasks/tools/)
 - Git
 - [Node.js 20](https://nodejs.org/)
-- [JAVA 17](https://adoptium.net/)
-- [MAVEN 3.9+](https://maven.apache.org/)
+- [Java 17](https://adoptium.net/)
+- [Maven 3.9+](https://maven.apache.org/)
 
 ---
 
@@ -87,13 +93,13 @@ MySQL corre en una EC2 dentro de la subred privada, accesible únicamente desde 
 ### 1. Clonar el repositorio
 
 ```bash
-git clone <https://github.com/ScarthPz/Proyecto_2_Devops.git>
+git clone https://github.com/ScarthPz/Proyecto_2_Devops.git
 cd Proyecto_2_Devops
 ```
 
 ### 2. Configurar variables de entorno
 
-Crea un archivo `.env` en la raíz del proyecto:
+Crea un archivo `.env` en la raíz del proyecto (ver `.env.example`):
 
 ```env
 MYSQL_ROOT_PASSWORD=rootsecreto
@@ -111,7 +117,7 @@ docker compose up --build -d
 
 | Servicio | URL |
 |---|---|
-| Frontend | http://localhost:3000 |
+| Frontend | http://localhost:80 |
 | Backend Ventas | http://localhost:8080 |
 | Backend Despachos | http://localhost:8081 |
 | Swagger Ventas | http://localhost:8080/swagger-ui.html |
@@ -157,8 +163,6 @@ Los tests de contexto (`contextLoads`) verifican que el contexto de Spring Boot 
 Obtén los valores desde **AWS Academy → Start Lab → AWS Details → AWS CLI**:
 
 ```bash
-aws configure
-# O exportar directamente:
 export AWS_ACCESS_KEY_ID=...
 export AWS_SECRET_ACCESS_KEY=...
 export AWS_SESSION_TOKEN=...
@@ -166,7 +170,7 @@ export AWS_SESSION_TOKEN=...
 
 ### 2. Crear archivo de variables
 
-Dentro de la carpeta `infra/`, crea `terraform.tfvars` (ignorado por `.gitignore`):
+Dentro de la carpeta `infra/terraform/`, crea `terraform.tfvars` (ignorado por `.gitignore`):
 
 ```hcl
 db_password   = "tu_password"
@@ -176,7 +180,7 @@ key_pair_name = "nombre_de_tu_keypair"
 ### 3. Desplegar infraestructura
 
 ```bash
-cd infra
+cd infra/terraform
 terraform init
 terraform plan
 terraform apply
@@ -186,7 +190,6 @@ Esto crea:
 - VPC `devops_vpc` (10.0.0.0/16) con subredes pública y privada
 - NAT Gateway para salida de la subred privada
 - EKS Cluster `despacho-cluster` con node group administrado
-- Manifiestos K8s: Deployments, Services y HPA para los 3 microservicios
 - Repositorios ECR: `frontend_despacho`, `backend_ventas`, `backend_despachos`
 - Security Groups con acceso controlado
 - CloudWatch Log Group con retención de 7 días
@@ -230,14 +233,14 @@ Se ejecuta en cada push a `develop` y en pull requests. Verifica que el código 
 ```
 push/PR → develop
     │
-    ├── frontend-build   → npm install + npm run build
-    ├── backend-ventas-build   → mvn clean install
+    ├── frontend-build          → npm install + npm run build
+    ├── backend-ventas-build    → mvn clean install
     └── backend-despachos-build → mvn clean install
 ```
 
 ### CD — `cd.yml` (rama `deploy`)
 
-Se ejecuta solo cuando se hace push a `deploy`. Requiere que el CI haya pasado primero.
+Se ejecuta solo cuando se hace push a `deploy`.
 
 ```
 push → deploy
@@ -247,39 +250,38 @@ push → deploy
     │   ├── docker build + push backend-ventas → ECR
     │   └── docker build + push backend-despachos → ECR
     │
-    └── deploy
-        ├── kubectl apply db-secret.yml
-        ├── kubectl apply mysql / backend / frontend / hpa
-        ├── kubectl set image (actualiza con tag del commit)
-        ├── kubectl rollout status (espera confirmación)
+    ├── deploy
+    │   ├── kubectl apply db-secret.yml
+    │   ├── kubectl apply mysql / backend / frontend / hpa
+    │   ├── kubectl set image (actualiza con tag del commit SHA)
+    │   └── kubectl rollout status (espera confirmación de despliegue)
+    │
+    └── get-url
         └── kubectl get pods + get hpa + URL pública del LoadBalancer
 ```
 
 ### GitHub Secrets requeridos
 
-Configura estos secrets en **Settings → Secrets and variables → Actions**:
+Configura estos secrets en **Settings → Secrets and variables → Actions** (ver `secrets.yml`):
 
 | Secret | Descripción |
 |---|---|
-| `AWS_ACCESS_KEY_ID` | Access Key de AWS Academy |
-| `AWS_SECRET_ACCESS_KEY` | Secret Access Key de AWS Academy |
-| `AWS_SESSION_TOKEN` | Session Token de AWS Academy |
-| `ECR_REPO_FRONTEND` | `devops-e2-frontend` |
-| `ECR_REPO_BACKEND_VENTAS` | `devops-e2-backend-ventas` |
-| `ECR_REPO_BACKEND_DESPACHOS` | `devops-e2-backend-despachos` |
+| `AWS_ACCESS_KEY_ID` | Access Key temporal de AWS Academy |
+| `AWS_SECRET_ACCESS_KEY` | Secret Access Key temporal de AWS Academy |
+| `AWS_SESSION_TOKEN` | Session Token temporal de AWS Academy (requerido por STS) |
+| `ECR_REPO_FRONTEND` | URI del repositorio ECR para el frontend |
+| `ECR_REPO_BACKEND_VENTAS` | URI del repositorio ECR para backend ventas |
+| `ECR_REPO_BACKEND_DESPACHOS` | URI del repositorio ECR para backend despachos |
+
+> ⚠️ Las credenciales AWS Academy expiran cada sesión. Actualiza los tres secrets `AWS_*` cada vez que inicies el Learner Lab.
 
 ---
 
 ## Persistencia de datos
 
-Los datos de MySQL se persisten mediante un **named volume** de Docker (`mysql_data`), montado en `/var/lib/mysql` dentro del contenedor, garantizando que la información no se pierda al reiniciar los contenedores.
+En entorno local, los datos de MySQL se persisten mediante **named volumes** de Docker (`mysql_data`), garantizando que la información no se pierda al reiniciar los contenedores.
 
-Se eligió **named volume** sobre bind mount porque:
-- Es gestionado completamente por Docker, sin depender de rutas absolutas del sistema host.
-- Es portable entre distintos sistemas operativos (Linux, Mac, Windows).
-- Facilita operaciones de backup mediante la API de volúmenes de Docker.
-
-En AWS, la base de datos corre en una EC2 con volumen EBS `gp3` de 30 GB.
+En AWS, MySQL corre como pods dentro del clúster EKS con volúmenes persistentes de Kubernetes.
 
 ---
 
@@ -292,7 +294,7 @@ En AWS, la base de datos corre en una EC2 con volumen EBS `gp3` de 30 GB.
 > ```
 > O al final del pipeline CD en el job `get-url`.
 
-### Backend Ventas — `http://<IP_PUBLICA>/api/ventas/`
+### Backend Ventas — `http://<URL_PUBLICA>/api/ventas/`
 
 | Método | Endpoint | Descripción |
 |---|---|---|
@@ -302,7 +304,7 @@ En AWS, la base de datos corre en una EC2 con volumen EBS `gp3` de 30 GB.
 | PUT | `/ventas/{id}` | Actualizar venta |
 | DELETE | `/ventas/{id}` | Eliminar venta |
 
-### Backend Despachos — `http://<IP_PUBLICA>/api/despachos/`
+### Backend Despachos — `http://<URL_PUBLICA>/api/despachos/`
 
 | Método | Endpoint | Descripción |
 |---|---|---|
@@ -316,8 +318,8 @@ En AWS, la base de datos corre en una EC2 con volumen EBS `gp3` de 30 GB.
 
 | Servicio | URL |
 |---|---|
-| Ventas | `http://<IP_PUBLICA>:8080/swagger-ui.html` |
-| Despachos | `http://<IP_PUBLICA>:8081/swagger-ui.html` |
+| Ventas | `http://<URL_PUBLICA>/api/ventas/swagger-ui.html` |
+| Despachos | `http://<URL_PUBLICA>/api/despachos/swagger-ui.html` |
 
 ---
 
@@ -327,11 +329,13 @@ En AWS, la base de datos corre en una EC2 con volumen EBS `gp3` de 30 GB.
 # 1. Iniciar lab en AWS Academy y actualizar los secrets en GitHub
 
 # 2. Clonar el repositorio
-git clone <https://github.com/ScarthPz/Proyecto_2_Devops.git>
+git clone https://github.com/ScarthPz/Proyecto_2_Devops.git
 cd Proyecto_2_Devops
 
 # 3. Configurar credenciales AWS
-aws configure
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+export AWS_SESSION_TOKEN=...
 
 # 4. Recrear infraestructura EKS con Terraform
 cd infra/terraform
@@ -350,19 +354,19 @@ kubectl get service frontend
 
 ---
 
-##  Buenas prácticas aplicadas 
+## Buenas prácticas aplicadas
 
 - **Kubernetes Secrets** para credenciales de base de datos (`db-secret.yml`), evitando contraseñas hardcodeadas en los manifiestos.
 - **Multi-stage Dockerfiles** para imágenes limpias y de menor tamaño.
 - **Secretos gestionados** con GitHub Secrets y `terraform.tfvars` (en `.gitignore`), nunca en el código fuente.
 - **Infraestructura como código** con Terraform, reproducible en cualquier cuenta AWS Academy.
-- **Proxy inverso Nginx** que enruta ambos backends sin exponer puertos adicionales al exterior.
-- **Health checks** en los contenedores ECS usando Spring Boot Actuator (`/actuator/health/readiness`).
+- **Proxy inverso Nginx** que enruta ambos backends usando DNS interno de Kubernetes, sin exponer puertos adicionales al exterior.
+- **Health checks** con Spring Boot Actuator (`/actuator/health/readiness`).
 - **Logs centralizados** en CloudWatch con retención de 7 días.
 - **CI/CD separado** en dos pipelines: CI para validar código en `develop`, CD para desplegar desde `deploy`.
-- **Tests con perfil de base de datos en memoria** (H2) para no depender de MySQL en el entorno de CI.
-- **Named volumes** para persistencia de datos resiliente ante reinicios de contenedores.
+- **Tests con H2 en memoria** para no depender de MySQL en el entorno de CI.
+- **HPA configurado** en los tres servicios para escalar automáticamente ante picos de carga.
 
 ---
 
-© 2026 Innovatech Chile | Introducción a Herramientas DevOps  ᓚᘏᗢ
+© 2026 Innovatech Chile | Introducción a Herramientas DevOps ᓚᘏᗢ
