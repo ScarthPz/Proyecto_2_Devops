@@ -71,7 +71,7 @@ Los tres microservicios corren como **Deployments independientes en EKS**, cada 
 - `/api/ventas/*` → Service `backend-ventas:8080` (ClusterIP)
 - `/api/despachos/*` → Service `backend-despachos:8081` (ClusterIP)
 
-MySQL corre como pods dentro del clúster EKS en la subred privada, accesible únicamente desde los backends vía Service ClusterIP. Las credenciales se gestionan con Kubernetes Secrets (`db-credentials`).
+MySQL corre como pods dentro del clúster EKS, accesible únicamente desde los backends vía Service ClusterIP (no se expone externamente). Las credenciales se gestionan con Kubernetes Secrets (`db-credentials`).
 
 ---
 
@@ -187,12 +187,13 @@ terraform apply
 ```
 
 Esto crea:
-- VPC `devops_vpc` (10.0.0.0/16) con subredes pública y privada
-- NAT Gateway para salida de la subred privada
-- EKS Cluster `despacho-cluster` con node group administrado
+- VPC `devops_vpc` (10.0.0.0/16) con dos subredes públicas (multi-AZ) para los nodos de EKS
+- EKS Cluster `despacho-cluster` con node group administrado (t3.medium, autoscaling 1-4 nodos)
 - Repositorios ECR: `frontend_despacho`, `backend_ventas`, `backend_despachos`
-- Security Groups con acceso controlado
-- CloudWatch Log Group con retención de 7 días
+- Security Group con acceso restringido (kubelet solo desde la VPC, HTTP/HTTPS públicos para el frontend)
+- CloudWatch Log Group (`/aws/eks/despacho-cluster/cluster`) con retención de 7 días, recibiendo logs del control plane de EKS (api, audit, authenticator)
+
+> Nota: se usan subredes públicas (sin NAT Gateway) para evitar el costo adicional del NAT en el entorno de laboratorio de AWS Academy. El acceso a los pods sigue restringido vía Security Groups y Services de tipo ClusterIP.
 
 ### 4. Obtener outputs
 

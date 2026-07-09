@@ -10,6 +10,12 @@ resource "aws_eks_cluster" "eks" {
     subnet_ids         = [aws_subnet.public.id, aws_subnet.public_b.id]
     security_group_ids = [aws_security_group.eks_nodes_sg.id]
   }
+
+  # Observabilidad: logs del control plane hacia CloudWatch
+  # (cloudwatch.tf crea el log group con retención de 7 días)
+  enabled_cluster_log_types = ["api", "audit", "authenticator"]
+
+  depends_on = [aws_cloudwatch_log_group.eks_cluster_logs]
 }
 
 resource "aws_eks_node_group" "workers" {
