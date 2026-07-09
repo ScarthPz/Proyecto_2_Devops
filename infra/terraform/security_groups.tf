@@ -28,15 +28,15 @@ resource "aws_security_group" "eks_nodes_sg" {
   }
 
   ingress {
-    description = "Plano de control EKS a nodos"
+    description = "Plano de control EKS a nodos (kubelet) - restringido a la VPC"
     from_port   = 10250
     to_port     = 10250
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [aws_vpc.devops_vpc.cidr_block]
   }
 
   egress {
-    description = "Todo el trafico saliente"
+    description = "Trafico saliente (pull de imagenes ECR, DNS, actualizaciones)"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"

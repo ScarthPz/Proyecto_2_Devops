@@ -1,0 +1,23 @@
+# Ignora dependencias locales (se reinstalan dentro del contenedor)
+node_modules/
+dist/
+build/
+
+# Ignora archivos de configuración locales
+.env
+.env.local
+*.log
+npm-debug.log*
+
+# Ignora control de versiones y sistema de build
+.git/
+.gitignore
+docker-compose.override.yml
+Dockerfile*
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store

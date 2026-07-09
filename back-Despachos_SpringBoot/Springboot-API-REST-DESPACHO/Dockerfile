@@ -6,9 +6,9 @@ COPY src ./src
 
 RUN mvn clean package -DskipTests
 
-# Stage 2: ejecutar la api
-FROM eclipse-temurin:17-jdk
-RUN apt-get update && apt-get install -y curl dos2unix && rm -rf /var/lib/apt/lists/*
+# Stage 2: ejecutar la api (imagen minimalista: solo JRE, sin herramientas de compilación)
+FROM eclipse-temurin:17-jre
+RUN apt-get update && apt-get install -y --no-install-recommends dos2unix && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /build/target/*.jar app.jar
 COPY entrypoint.sh /app/entrypoint.sh
