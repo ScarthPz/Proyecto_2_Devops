@@ -370,4 +370,4 @@ kubectl get service frontend
 
 ---
 
-© 2026 Innovatech Chile | Introducción a Herramientas DevOps ᓚᘏᗢ
+© 2026 Innovatech Chile | Introducción a Herramientas DevOps ᓚᘏᗢ# Demo CI Sun Jul 12 00:55:19 HSP 2026
